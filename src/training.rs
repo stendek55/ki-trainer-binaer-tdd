@@ -177,4 +177,42 @@ mod tests {
         // die fitness darf sich im vergleich zum start nicht verschlechtert haben
         assert!(finaler_champion.evaluate_fitness(&datensatz) >= 0);
     }
+    #[test]
+    fn test_trainieren_verbessert_fitness_oder_behaelt_champion() {
+        // ARRANGE: Wir erstellen einen Datensatz mit 20 identischen Beispielen.
+        // Das Erreichen einer höheren Punktzahl ist durch reines Raten unwahrscheinlich.
+        let mut datensatz = Vec::new();
+        for _ in 0..20 {
+            datensatz.push(TrainingSample {
+                input: [BitByte::new(0x00); 32],
+                target: Classification::EINS,
+            });
+        }
+
+        // Wir erzwingen viele Generationen und eine große Population.
+        // Wenn die Schleife arbeitet, MUSS sich ein besseres Netz als der Start-Zufall finden.
+        let konfiguration = TrainingsKonfiguration {
+            populations_groesse: 50,
+            maximale_generationen: 30,
+            basis_mutations_rate: 0.1,
+            stagnations_grenze: 5,
+        };
+
+        // Wir messen die Fitness eines isolierten Zufallsnetzes als Referenz
+        let dummy_start = BitNeuralNetwork::new_random();
+        let start_fitness = dummy_start.evaluate_fitness(&datensatz);
+
+        // ACT: Training starten
+        let finaler_champion = trainieren(&datensatz, konfiguration);
+        let end_fitness = finaler_champion.evaluate_fitness(&datensatz);
+
+        // ASSERT: Die Evolution muss statistisch gesehen das Startniveau schlagen!
+        // Sollte die Funktion nur das Startnetz zurückgeben, scheitert dieser Assert fast immer.
+        assert!(
+            end_fitness > start_fitness,
+            "Die Evolution hat die Fitness nicht verbessert! Start: {}, Ende: {}",
+            start_fitness,
+            end_fitness
+        );
+    }
 }
