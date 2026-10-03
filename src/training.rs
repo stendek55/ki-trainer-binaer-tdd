@@ -12,10 +12,10 @@ pub struct TrainingsKonfiguration {
 
 /// startet den genetischen trainingsprozess
 pub fn trainieren(
-    datensatz: &[TrainingSample],
-    konfig: TrainingsKonfiguration,
+    _datensatz: &[TrainingSample],
+    _konfig: TrainingsKonfiguration,
 ) -> BitNeuralNetwork {
-    unimplemented!()
+    BitNeuralNetwork::new_random()
 }
 
 /// Speichert das trainierte Netzwerk als JSON-Datei auf die Festplatte
@@ -155,7 +155,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_trainieren_waehlt_besseren_mutanten() {
         // arrange: konfiguration für genau eine generation mit zwei mutanten vorbereiten
         let konfiguration = TrainingsKonfiguration {
