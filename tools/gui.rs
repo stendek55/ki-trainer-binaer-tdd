@@ -6,7 +6,7 @@ use minifb::{Key, MouseButton, Window, WindowOptions};
 /// Universelle GUI-Engine für ein interaktives 16x16 Gitter.
 pub fn starte_gitter_gui<F>(fenster_titel: &str, mut event_schleife: F)
 where
-    F: FnMut(&Window, &mut [u8], &mut bool),
+    F: FnMut(&mut Window, &mut [u8], &mut bool),
 {
     const GRID_SIZE: usize = 16;
     const TOTAL_PIXELS: usize = GRID_SIZE * GRID_SIZE;
@@ -45,7 +45,7 @@ where
         }
 
         // Führt die individuelle Logik des jeweiligen Tools aus
-        event_schleife(&window, &mut grid_data, &mut feld_wurde_geleert);
+        event_schleife(&mut window, &mut grid_data, &mut feld_wurde_geleert);
 
         // Geteiltes Software-Rendering (Nearest-Neighbor + Gitternetz)
         for y in 0..HEIGHT {

@@ -21,6 +21,9 @@ path = "tools/sehen.rs"
 [[bin]]
 name = "erweitern"
 path = "tools/erweitern.rs"
+[[bin]]
+name = "livetester"
+path = "tools/live_tester.rs"
 #main
 [[bin]]
 name = "main"
