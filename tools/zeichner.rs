@@ -15,6 +15,7 @@ const COLOR_WHITE: u32 = 0xFFFFFFFF; // Hintergrundfarbe (Inaktiv -> Wert 0)
 const COLOR_BLACK: u32 = 0xFF000000; // Zeichenfarbe (Aktiv -> Wert 1)
 const COLOR_GRID: u32 = 0xFFE0E0E0; // Hellgraue Gitterlinien zur Orientierung
 
+const SPEICHER_PFAD: &str = "datas/zahlen_hand.csv";
 //###########################################################################################
 //######-----eigene FESTLEGEUNG-----#########################################################
 // #####-----zu beginn wird das ganze projekt erstmal nur auf die 0 und 1 trainiert-----#####
@@ -144,7 +145,7 @@ fn save_to_csv(label: u8, data: &[u8]) {
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("zahlen_hand.csv")
+        .open(SPEICHER_PFAD)
         .unwrap();
 
     // Erstelle den Textstring für die Zeile. Wir beginnen mit dem Klassen-Label (0 oder 1)

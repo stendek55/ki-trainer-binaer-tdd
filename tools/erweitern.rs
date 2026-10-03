@@ -4,6 +4,9 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 const GRID_SIZE: usize = 16;
 const TOTAL_PIXELS: usize = GRID_SIZE * GRID_SIZE; // 256
 
+const SPEICHER_PFAD: &str = "datas/mehr_zahlen.csv";
+const LADE_PAD: &str = "datas/zahlen_hand.csv";
+
 struct DataRow {
     label: u8,
     grid_data: Vec<u8>,
@@ -13,7 +16,7 @@ fn main() {
     println!("#######-----DATA AUGMENTATION GESTARTET-----#######");
 
     // 1. Quelldaten einlesen
-    let dataset = load_csv("zahlen_hand.csv");
+    let dataset = load_csv(LADE_PAD);
     if dataset.is_empty() {
         println!("Fehler: 'zahlen_hand.csv' konnte nicht geöffnet werden oder ist leer.");
         return;
@@ -21,8 +24,7 @@ fn main() {
     println!("-> {} Ursprungsmuster geladen.", dataset.len());
 
     // 2. Neue Ausgabedatei vorbereiten
-    let write_file =
-        File::create("zahlen_erweitert.csv").expect("Kann Ausgabedatei nicht erstellen");
+    let write_file = File::create(SPEICHER_PFAD).expect("Kann Ausgabedatei nicht erstellen");
     let mut writer = BufWriter::new(write_file);
 
     let mut count_original = 0;
@@ -50,8 +52,8 @@ fn main() {
         let augmented_row = dilate_zoom_outward_pure(row);
         write_row(&mut writer, &augmented_row);
         count_augmented += 1;
-        //nächte vier erweiterungen
-        //-> zahl wird jeweils ein pixel in gesetzte richtung verschoben
+        //nächste erweiterungen
+        //-> zahl wird jeweils x pixel in gesetzte richtung verschoben
         let directions = [
             Direction::Up,
             Direction::Down,
@@ -60,9 +62,11 @@ fn main() {
         ];
         for &dir in &directions {
             // try_translate liefert nur dann Daten, wenn nichts abgeschnitten wird
-            if let Some(augmented_row) = try_translate(row, dir, 2) {
-                write_row(&mut writer, &augmented_row);
-                count_augmented += 1;
+            for x in 1..=2 {
+                if let Some(augmented_row) = try_translate(row, dir, x) {
+                    write_row(&mut writer, &augmented_row);
+                    count_augmented += 1;
+                }
             }
         }
     }
@@ -78,6 +82,8 @@ fn main() {
     println!("     |---> dicker->plus pixel->rechts-unten");
     println!("     |---> dicker->plus pixel->schräg");
     println!("     |---> dicker->neue pixel->zoom-gross");
+    println!("     |---> verschiebung -> jeweils alle vier richtungen");
+    println!("              |---> 1 und 2 pixel");
     println!("  ----------------------------------------------------------");
     println!(
         "  Gesamte Zeilen in neuer CSV:    {}",

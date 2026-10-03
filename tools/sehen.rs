@@ -16,6 +16,8 @@ const WINDOW_HEIGHT: usize = GRID_SIZE * PIXEL_SCALE;
 const COLOR_PAPIER: u32 = 0xFFCCCCCC; // Hintergrundfarbe (Grau)
 const COLOR_STIFT: u32 = 0xFF554223; // Vordergrundfarbe (Braun)
 
+const LADE_DATEI: &str = "datas/zahlen_hand.csv";
+
 /// Heap-allokierte Datenstruktur für die Repräsentation einer CSV-Zeile.
 struct DataRow {
     label: u8,          // Die klassifizierte Ziffer (Metadaten).
@@ -24,7 +26,7 @@ struct DataRow {
 
 fn main() {
     // I/O-Operation: Lädt den Datensatz sequentiell in den Hauptspeicher.
-    let dataset = load_csv("zahlen_hand.csv");
+    let dataset = load_csv(LADE_DATEI);
     // Early Return bei fehlgeschlagenem I/O oder invalidem Dateiinhalt.
     if dataset.is_empty() {
         return;
