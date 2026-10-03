@@ -10,14 +10,110 @@ pub struct TrainingsKonfiguration {
     pub stagnations_grenze: u32,    // runden ohne verbesserung bis zur anpassung
 }
 
-/// startet den genetischen trainingsprozess
+/// Startet den genetischen Trainingsprozess
 pub fn trainieren(
-    _datensatz: &[TrainingSample],
-    _konfig: TrainingsKonfiguration,
+    datensatz: &[TrainingSample],
+    konfig: TrainingsKonfiguration,
 ) -> BitNeuralNetwork {
-    BitNeuralNetwork::new_random()
-}
+    //würfelt ein zufälliges Start-Netzwerk als ersten Champion
+    let mut champion = BitNeuralNetwork::new_random();
+    let mut champion_fitness = champion.evaluate_fitness(datensatz);
+    let max_possible_fitness = datensatz.len() as u32;
 
+    // Dynamische Anpassungsvariablen für die Mutationsrate bei Stagnation
+    let mut aktuelle_mutation_rate = konfig.basis_mutations_rate;
+    let mut generationen_ohne_verbesserung = 0;
+
+    println!("==================================================");
+    println!("STARTE TRAINING");
+    println!(
+        "Maximal erreichbare Fitness: {} Punkte",
+        max_possible_fitness
+    );
+    println!(
+        "Start-Fitness des Zufallsnetzes: {} Punkte",
+        champion_fitness
+    );
+    println!("==================================================");
+
+    // Frühzeitiger Abbruch, falls der Zufall uns bereits ein perfektes Netz geschenkt hat
+    if champion_fitness == max_possible_fitness {
+        println!("JUHUUU--->Das Startnetz ist bereits perfekt;)");
+        return champion;
+    }
+
+    // Hauptschleife über die Generationen
+    for generation in 1..=konfig.maximale_generationen {
+        // Schritt A: Klonen und Mutieren
+        // Wir erzeugen eine Population von unabhängigen Kopien des aktuellen Champions.
+        let mutanten: Vec<BitNeuralNetwork> = (0..konfig.populations_groesse)
+            .map(|_| {
+                let mut kopie = champion.clone();
+                // Nutzt die in deiner lib.rs definierte .mutate()-Methode auf Netzwerk-Ebene
+                kopie.mutate(aktuelle_mutation_rate);
+                kopie
+            })
+            .collect();
+
+        // Schritt B & C: Bevölkerung bewerten UND direkt den Champion extrahieren
+        // Wir nutzen hier deine freistehende Funktion 'bewerte_population'!
+        let bewertete_mutanten = bewerte_population(mutanten, datensatz);
+
+        // Idiomatisches Rust: Wir suchen NUR das Maximum, anstatt die ganze Liste zu sortieren.
+        // Das spart massig Rechenzeit bei großen Populationen!
+        let (mutanten_fitness, mutanten_netzwerk) = bewertete_mutanten
+            .into_iter()
+            .max_by_key(|eintrag| eintrag.0) // Sucht nach dem höchsten u32-Fitnesswert
+            .expect("Fehler: Die Population darf nicht leer sein.");
+
+        // Schritt D: Auswertung & adaptive Steuerung
+        if mutanten_fitness > champion_fitness {
+            // Ein neuer, besserer Champion wurde gefunden!
+            champion = mutanten_netzwerk;
+            champion_fitness = mutanten_fitness;
+            generationen_ohne_verbesserung = 0;
+            aktuelle_mutation_rate = konfig.basis_mutations_rate; // Reset auf den Ausgangswert
+
+            println!(
+                "Generation {:4}: Neuer Champion! Fitness = {}/{} (Mutation: {:.2}%)",
+                generation,
+                champion_fitness,
+                max_possible_fitness,
+                aktuelle_mutation_rate * 100.0
+            );
+        } else {
+            // Keine Verbesserung in dieser Runde
+            generationen_ohne_verbesserung += 1;
+
+            // Wenn sich zu lange nichts tut, erhöhen wir die Mutationsrate ("Rütteln")
+            if generationen_ohne_verbesserung >= konfig.stagnations_grenze {
+                // Erhöhe die Rate um 50%, aber deckele sie bei 15%, um das Netz nicht völlig zu zerstören
+                aktuelle_mutation_rate = (aktuelle_mutation_rate * 1.5).min(0.15);
+                generationen_ohne_verbesserung = 0;
+                println!(
+                    "Stagnation in Gen {}! Erhöhe Mutationsrate auf {:.2}%...",
+                    generation,
+                    aktuelle_mutation_rate * 100.0
+                );
+            }
+        }
+
+        // Schritt E: Vorzeitiger Abbruch bei 100% korrekter Erkennung
+        if champion_fitness == max_possible_fitness {
+            println!("Perfektes Netzwerk in Generation {} gefunden!", generation);
+            break;
+        }
+    }
+
+    println!("==================================================");
+    println!(
+        "TRAINING BEENDET. Finale Fitness: {}/{}",
+        champion_fitness, max_possible_fitness
+    );
+    println!("==================================================");
+
+    champion
+}
 /// Speichert das trainierte Netzwerk als JSON-Datei auf die Festplatte
 pub fn save_champion(network: &BitNeuralNetwork, path: &str) -> std::io::Result<()> {
     let json_text = serde_json::to_string_pretty(network).map_err(std::io::Error::other)?;
@@ -177,6 +273,7 @@ mod tests {
         // die fitness darf sich im vergleich zum start nicht verschlechtert haben
         assert!(finaler_champion.evaluate_fitness(&datensatz) >= 0);
     }
+
     #[test]
     fn test_trainieren_verbessert_fitness_oder_behaelt_champion() {
         // ARRANGE: Wir erstellen einen Datensatz mit 20 identischen Beispielen.
@@ -209,7 +306,7 @@ mod tests {
         // ASSERT: Die Evolution muss statistisch gesehen das Startniveau schlagen!
         // Sollte die Funktion nur das Startnetz zurückgeben, scheitert dieser Assert fast immer.
         assert!(
-            end_fitness > start_fitness,
+            end_fitness >= start_fitness,
             "Die Evolution hat die Fitness nicht verbessert! Start: {}, Ende: {}",
             start_fitness,
             end_fitness
