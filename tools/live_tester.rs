@@ -4,7 +4,7 @@ use ki_trainer_binaer::{BitByte, BitNeuralNetwork, Classification, training::loa
 mod gui;
 use gui::starte_gitter_gui;
 
-const KI_DATEI: &str = "trained_champion.json";
+const KI_DATEI: &str = "mein_erstes_netzwerk.json";
 
 fn main() {
     println!("Lade trainierte KI für Live-Test im Tool-Ordner...");
