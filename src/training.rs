@@ -1,4 +1,5 @@
 use crate::{BitNeuralNetwork, TrainingSample};
+use rayon::prelude::*;
 use std::fs::File;
 use std::io::{Read, Write};
 
@@ -50,10 +51,12 @@ pub fn trainieren(
             .map(|_| {
                 let mut kopie = champion.clone();
                 // Nutzt die in deiner lib.rs definierte .mutate()-Methode auf Netzwerk-Ebene
+                // Da rand::rng() Thread-lokal arbeitet, holt sich jeder Thread
+                // automatisch seinen eigenen, sicheren Zufallsgenerator!
                 kopie.mutate(aktuelle_mutation_rate);
                 kopie
             })
-            .collect();
+            .collect(); // Führt die Threads am Ende wieder sauber zusammen
 
         // Schritt B & C: Bevölkerung bewerten UND direkt den Champion extrahieren
         // Wir nutzen hier deine freistehende Funktion 'bewerte_population'!
@@ -144,7 +147,7 @@ pub fn bewerte_population(
     dataset: &[TrainingSample],
 ) -> Vec<(u32, BitNeuralNetwork)> {
     population
-        .into_iter()
+        .into_par_iter() // <- HIER: Berechnet die Netzwerke gleichzeitig
         .map(|netz| {
             let fitness = netz.evaluate_fitness(dataset);
             (fitness, netz)
