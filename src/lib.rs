@@ -131,7 +131,7 @@ pub struct TrainingSample {
 
 pub fn lade_test_datensatz(index: usize) -> TrainingSample {
     //let inhalt = include_str!("../tests/fixtures/test_daten_01.csv");
-    let inhalt = include_str!("../datas/fertige_daten.csv");
+    let inhalt = include_str!("../datas/mehr_zahlen.csv");
 
     // alle zeilen trennen und die zeile am gewünschten index herausholen
     let ds = inhalt.lines().nth(index).expect("index nicht gefunden");
@@ -276,29 +276,37 @@ BinaryNode {
 // =========================================================================
 // AUFGERÄUMTER ZUSAMMENBAU DES GESAMT-NETZWERKS
 // =========================================================================
-
+// =====================================================================================
+// INITIALISIERUNG DES NETZWERKS (FABRIK-FUNKTION):
+// =====================================================================================
+// Erstellt ein komplett neues, untrainiertes Netzwerk im RAM.
+// 1. `.map(...)`: Iteriert sequentiell durch die festgelegte Knotenanzahl pro Schicht.
+// 2. Gewichte: Füllt die Byte-Arrays der Knoten via `rng.fill` mit zufälligen Startbits.
+// 3. Thresholds: Würfelt für jeden Knoten einen Schwellenwert im sicheren AND-Bereich.
+// 4. `.collect()`: Sammelt alle erzeugten Knoten performant in die finalen Layer-Vektoren.
+// =====================================================================================
 impl BitNeuralNetwork {
     /// Erstellt das gesamte Netzwerk durch das Aufrufen der ausgelagerten Knoten-Fabrik.
     pub fn new_random() -> Self {
         let mut rng = rand::rng();
         //schicht eins mit 64 knoten zu je 32 byte
         let hidden_1: Vec<BinaryNode<32>> = (0..64)
-            .map(|_| BinaryNode::new_random(&mut rng, 100, 180))
+            .map(|_| BinaryNode::new_random(&mut rng, 10, 18))
             .collect();
 
         //schicht zwei mit 32 knoten zu je 8 byte
         let hidden_2: Vec<BinaryNode<8>> = (0..32)
-            .map(|_| BinaryNode::new_random(&mut rng, 25, 45))
+            .map(|_| BinaryNode::new_random(&mut rng, 8, 14))
             .collect();
 
         //schicht drei mit 16 knoten zu je 4 byte
         let hidden_3: Vec<BinaryNode<4>> = (0..16)
-            .map(|_| BinaryNode::new_random(&mut rng, 12, 24))
+            .map(|_| BinaryNode::new_random(&mut rng, 4, 8))
             .collect();
 
         //ausgabeschicht mit 3 knoten zu je 2 byte
         let output_nodes: Vec<BinaryNode<2>> = (0..3)
-            .map(|_| BinaryNode::new_random(&mut rng, 6, 12))
+            .map(|_| BinaryNode::new_random(&mut rng, 1, 4))
             .collect();
         // Alle sauber erzeugten Schichten zusammenfügen
         BitNeuralNetwork {
@@ -311,6 +319,27 @@ impl BitNeuralNetwork {
 
     /// Hilfsfunktion, die die Übereinstimmungen zwischen einem Eingabe-Slice
     /// und den Gewichten eines Knotens unter Verwendung von BitByte berechnet.
+    // =====================================================================================
+    // WARUM VON XNOR (!XOR) AUF AND UMSTELLEN (WICHTIGER LERN-EFFEKT):
+    // =====================================================================================
+    // ALT (XNOR):
+    // Bei XNOR ergab (0 XNOR 0) eine 1. Das bedeutete: Das Netzwerk hat Punkte vergeben,
+    // wenn SOWOHL das Bild als auch die gelernten Gewichte eine Null (Hintergrund) hatten.
+    // Da ein 16x16 Bild zu ~85% aus leerem Hintergrund besteht, konnte ein "fauler" Knoten
+    // astronomisch hohe Match-Scores erzielen, bloß weil er den Hintergrund wiedererkannte.
+    // Das Modell hat also primär gelernt, die Abwesenheit von Pixeln zu klassifizieren.
+    //
+    // NEU (AND):
+    // Bei einem bitweisen AND gilt: Nur (1 AND 1) ergibt eine 1. Überall dort, wo das Bild
+    // eine Null hat (Hintergrund), wird das Ergebnis knallhart auf 0 erzwungen – völlig egal,
+    // was der Knoten dort im Speicher hat (0 & 1 = 0; 0 & 0 = 0).
+    // Dadurch wird der leere Hintergrund komplett ausgeblendet. Der Knoten wird AUSSCHLIESSLICH
+    // dafür belohnt, wenn er echte, aktiv gezeichnete Linien und Formen der Zahl trifft!
+    //
+    // HINWEIS: Nach dem Wechsel müssen die zufälligen Start-Thresholds in `new_random()`
+    // drastisch abgesenkt werden (z.B. von 100-180 runter auf 10-25), da die "geschenkten"
+    // Hintergrund-Punkte nun wegfallen und das Netzwerk sonst "verhungert".
+    // =====================================================================================
     fn berechne_knoten_matches(input_layer: &[u8], knoten_weights: &[u8]) -> u32 {
         let mut gesamt_matches = 0u32;
 
@@ -318,8 +347,13 @@ impl BitNeuralNetwork {
             let bb_layer = BitByte::new(*layer_byte);
             let bb_weight = BitByte::new(*weight_byte);
 
-            let xnor_byte = bb_layer.bitwise_xor(bb_weight).bitwise_not();
-            gesamt_matches += xnor_byte.value().count_ones();
+            //alt -> XOR
+            //let xnor_byte = bb_layer.bitwise_xor(bb_weight).bitwise_not();
+            //gesamt_matches += xnor_byte.value().count_ones();
+
+            //AND -> dadurch wird der hintergrund aus nullen ignoriert
+            let and_byte = bb_layer.bitwise_and(bb_weight);
+            gesamt_matches += and_byte.value().count_ones();
         }
         gesamt_matches
     }

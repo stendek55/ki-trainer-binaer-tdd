@@ -47,10 +47,10 @@ fn main() {
     // 3. ENTSCHEIDUNG: WIE SOLL DIE EVOLUTION TRAINIEREN?
     // -------------------------------------------------------------------------
     let konfig = TrainingsKonfiguration {
-        populations_groesse: 100, // 100 Mutanten kämpfen pro Runde um das Überleben
-        maximale_generationen: 400, // Nach max. 400 Runden stoppt der Algorithmus
-        basis_mutations_rate: 0.02, // 2% Chance, dass ein Gen (Bit) mutiert
-        stagnations_grenze: 15,   // Wenn sich 15 Runden nix tut -> Mutationsrate erhöhen
+        populations_groesse: 222, // 100 Mutanten kämpfen pro Runde um das Überleben
+        maximale_generationen: 555, // Nach max. 400 Runden stoppt der Algorithmus
+        basis_mutations_rate: 0.06, // 2% Chance, dass ein Gen (Bit) mutiert
+        stagnations_grenze: 9,    // Wenn sich 15 Runden nix tut -> Mutationsrate erhöhen
     };
 
     // -------------------------------------------------------------------------
