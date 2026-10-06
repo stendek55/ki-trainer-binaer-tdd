@@ -131,7 +131,7 @@ pub struct TrainingSample {
 
 pub fn lade_test_datensatz(index: usize) -> TrainingSample {
     //let inhalt = include_str!("../tests/fixtures/test_daten_01.csv");
-    let inhalt = include_str!("../datas/fertige_daten.csv");
+    let inhalt = include_str!("../datas/fertige_zahlen_hand.csv");
 
     // alle zeilen trennen und die zeile am gewünschten index herausholen
     let ds = inhalt.lines().nth(index).expect("index nicht gefunden");

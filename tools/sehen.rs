@@ -17,7 +17,7 @@ const WINDOW_HEIGHT: usize = GRID_SIZE * PIXEL_SCALE;
 const COLOR_PAPIER: u32 = 0xFFCCCCCC; // Hintergrundfarbe (Grau)
 const COLOR_STIFT: u32 = 0xFF554223; // Vordergrundfarbe (Braun)
 
-const LADE_DATEI: &str = "datas/fertige_daten.csv";
+const LADE_DATEI: &str = "datas/fertige_zahlen_hand.csv";
 
 /// Heap-allokierte Datenstruktur für die Repräsentation einer CSV-Zeile.
 struct DataRow {
