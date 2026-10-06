@@ -1,4 +1,5 @@
 use minifb::{Key, Window, WindowOptions};
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
@@ -26,7 +27,8 @@ struct DataRow {
 
 fn main() {
     // I/O-Operation: Lädt den Datensatz sequentiell in den Hauptspeicher.
-    let dataset = load_csv(LADE_DATEI);
+    let datei_sehen = env::args().nth(1).unwrap_or(LADE_DATEI.to_string());
+    let dataset = load_csv(&datei_sehen);
     // Early Return bei fehlgeschlagenem I/O oder invalidem Dateiinhalt.
     if dataset.is_empty() {
         return;
