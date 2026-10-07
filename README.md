@@ -41,52 +41,64 @@ Ich verlasse mich nicht nur auf fertige Datensätze wie MNIST. Ich baue mir in R
 ## Die Kernfrage, die ich mir selbst beantworte:
 Kann man ein funktionsfähiges KI-Modell nur mit logischem Denken, ein paar Bits und feinstem Rust-Code bauen, ohne den Mainstream-Pfaden zu folgen?
 
-## Anwendung zum Zeichnen und Speichern der Zahlen
-![zahlenzeichner](eins.png)
-
 ---
 ---
-## ............*aktueller zwischenbericht*..............
-***auswertung durch ki***
-# Projektübersicht: Maschinelles Lernen auf Binärebene in Rust
 
-Dieses Projekt implementiert eine vollständige Pipeline zur Erzeugung, Visualisierung und Klassifizierung von handschriftlichen Mustern auf reiner Binärebene (16x16 Pixel) ohne externe Abhängigkeiten für die mathematischen Kernoperationen.
+# .....erstes FAZIT...
+# Entwicklungsbericht: Eigenes Binäres Neuronales Netzwerk mit Evolutionärem Ansatz
 
----
+## 1. Philosophie & Architektur-Ansatz
+Die Grundidee war es, eine **eigene Netzwerkarchitektur** komplett nach meinen eigenen Vorstellungen aufzubauen. Ich habe mich bewusst dagegen entschieden, mich zu tief in bestehende Dokumentationen oder fertige Anleitungen zu binären Netzen einzulesen. Ziel war es, maximale kreative Freiheit zu behalten und mich nicht von bereits existierenden Standardlösungen lenken zu lassen.
 
-## 1. Daten-Augmentation (`tools/erweitern.rs`)
-Dieses Skript dient der künstlichen Vergrößerung und Modifikation des bestehenden Datensatzes, um die Robustheit des späteren Modells zu verbessern.
-
-* **Datenimport:** Es liest bestehende Muster aus einer CSV-Datei ein und validiert, ob die Zeilen exakt dem Format von 1 Label plus 256 Pixelwerten (16x16 Matrix) entsprechen.
-* **Geometrische Transformationen:** Das Skript enthält Funktionen für Dilatation (Aufdickung von Linien nach links-oben, rechts-unten oder achsenspezifisch gesplittet) sowie für einen zentrumsgesicherten Zoom nach außen.
-* **Translation (Verschiebung):** Der aktive Code verschiebt die geladenen Pixelmuster testweise um eine definierte Pixelanzahl in vier Richtungen (Oben, Unten, Links, Rechts). Ein Randschutz stellt sicher, dass Muster verworfen werden, sobald relevante Bildinformationen über die Gittergrenzen hinaus abgeschnitten würden.
-* **Datenexport:** Die generierten synthetischen Muster werden zusammen mit den Originalen sequentiell in eine neue CSV-Datei geschrieben.
+### Die KI als Pair Programmer
+Bei der Entwicklung habe ich eine KI als zusätzlichen Entwickler (Pair Programmer) genutzt. Die Strategie war hierbei, die KI immer nur in **kleinen, isolierten Abschnitten** mit konkreten Bauanweisungen zu füttern. Sie kannte zu keinem Zeitpunkt die gesamte Architektur. Trotz dieses fragmentierten Wissens der KI war die Entwicklungsgeschwindigkeit extrem hoch, und das Konzept ging voll auf.
 
 ---
 
-## 2. Datensatz-Visualisierung (`tools/sehen.rs`)
-Dieses Skript stellt eine grafische Benutzeroberfläche bereit, um die in der CSV-Datei gespeicherten Binärmuster visuell zu prüfen.
+## 2. Technischer Aufbau des Netzwerks
+Das Netz ist als **Deep Binary Neural Network** (Mehrschichtiges binäres Netzwerk) strukturiert und besteht aus folgenden Schichten:
 
-* **Nearest-Neighbor-Upsampling:** Da die Quellmatrizen mit 16x16 Pixeln zu klein für eine menschliche Analyse sind, projiziert das Skript die Koordinaten mittels Ganzzahl-Division auf ein skaliertes Fenster von 368x368 Pixeln hoch.
-* **Interaktive Navigation:** Über die FFI-Schnittstelle der `minifb`-Bibliothek wird ein OS-Fenster geöffnet. Der Nutzer kann mit den Pfeiltasten (Links/Rechts) nicht-blockierend durch den gesamten Datensatz blättern.
-* **Metadaten-Anzeige:** Der Fenstertitel wird dynamisch aktualisiert und zeigt fortlaufend den aktuellen Index des Musters sowie das zugehörige numerische Klassen-Label an.
+* **Eingabeschicht (Input Layer):** Nimmt die Bilddaten auf.
+* **Verdeckte Schichten (Hidden Layers):** Drei Schichten zur Merkmalsextraktion.
+  * *Layer 1:* 64 Knoten (Neuronen)
+  * *Layer 2:* 32 Knoten
+  * *Layer 3:* 16 Knoten
+* **Ausgabeschicht (Output Layer):** 3 Knoten für die Klassifikation (Kategorien: *Eins*, *Null*, *Anderes*).
+
+Jede Schicht arbeitet mit spezifischen **Schwellenwerten (Activation Thresholds)**. Zum Start des Netzwerks wird eine zufällige Initialisierung (Startkonfiguration) der Knoten vorgenommen.
+
+### Performance-Meilenstein
+Ein riesiger Sprung in der Performance war die Implementierung von echtem **Multiprocessing**. Durch nur wenige Zeilen Code läuft das Training nun **parallel auf allen CPU-Kernen**, was die Rechengeschwindigkeit massiv nach oben geschraubt hat. Auch die Erstellung der Tools zur Generierung und Erweiterung der Trainingsdaten (Data Augmentation) lief völlig problemlos.
 
 ---
 
-## 3. Grafischer Daten-Generator (`tools/zeichner.rs`)
-Dieses Skript erlaubt es, eigene Trainingsdaten interaktiv per Maus zu zeichnen und direkt im passenden CSV-Format abzuspeichern.
+## 3. Der Trainingsprozess: Genetischer Algorithmus
+Da klassische mathematische Optimierungsmethoden hier nicht greifen, basiert das Training auf einem **Evolutionären Algorithmus (Klonen, Mutation und Selektion)**:
 
-* **Zeichenfläche:** Es initialisiert ein flaches 1D-Array im Arbeitsspeicher, welches das logische 16x16-Gitter repräsentiert. Die linke Maustaste setzt Pixel auf den Zustand 1 (aktiv/schwarz), die rechte Maustaste radiert Pixel zurück auf den Zustand 0 (inaktiv/weiß).
-* **Gitter-Rendering:** Zur Orientierung wird während des Zeichenvorgangs ein hellgraues Linienraster in den Framebuffer berechnet.
-* **Klassifizierung und Datei-I/O:** Durch Drücken der Tasten `0` oder `1` wird das gezeichnete Muster mit der entsprechenden Klasse versehen. Das Skript opens die Zieldatei im Append-Modus und hängt das Label gefolgt von den kommagetrennten 256 Binärwerten als neue Zeile an. Anschließend wird das Zeichenfeld automatisch geleert.
+1. **Evaluation:** Das Netz mit der höchsten Trefferquote in einem Durchlauf gewinnt.
+2. **Replikation (Klonen):** Das beste Netzwerk wird vervielfältigt.
+3. **Mutation:** Auf die Klone wird eine einfache Mutation angewendet, bei der zufällig Bits aktiviert oder deaktiviert werden (Bit-Flipping).
+4. **Iteratives Testen:** Die mutierten Netze werden erneut getestet. Setzt sich ein stärkeres Netz durch, wird dieses zum neuen Ausgangspunkt für die nächste Generation.
+
+### Dynamische Mutationsrate (Adaptive Mutation)
+Um aus lokalen Minima auszubrechen, habe ich eine dynamische Anpassung eingebaut: Wenn das Netzwerk stagniert – sich die Trefferquote also über mehrere Epochen nicht mehr verbessert –, wird die **Mutationsrate Schritt für Schritt erhöht**, um stärkere strukturelle Sprünge zu erzwingen.
 
 ---
 
-## 4. Binäres Neuronales Netzwerk (`src/lib.rs`)
-Dieses Skript implementiert die Kernlogik des Klassifikationsmodells, das vollständig auf Bitoperationen und hardwarenahen Berechnungen aufbaut.
+## 4. Erkenntnisse & Optimierung der Logik
+Im Laufe des Trainings gab es eine wichtige architektonische Anpassung in der ersten Schicht:
 
-* **BitByte-Wrapper:** Es definiert eine eigene Datenstruktur für Byte-Werte, die bitweise Operationen (AND, OR, XOR, NOT, Bit-Shifts) und gezieltes Bit-Toggling über Punktnotation (Method Chaining) ermöglicht.
-* **Netzwerk-Architektur:** Das Modell nutzt ein Feedforward-Netzwerk mit drei verdeckten Schichten (64, 32 und 16 binäre Knoten) sowie einer Ausgabeschicht mit 3 Knoten für die Zustände NULL, EINS und ANDERE. Jeder Knoten (`BinaryNode`) besitzt eine Schablone aus gelernten Bit-Mustern (Gewichten) und einen individuellen Schwellenwert (Threshold).
-* **Forward Pass via Bit-Matches:** Die Klassifizierung erfolgt ohne Fließkomma-Arithmetik. Das System berechnet die Übereinstimmungen zwischen Mustern und Knotengewichten über eine XNOR-Logik mit anschließendem Hardware-Popcount (`count_ones`). Erreicht die Anzahl der übereinstimmenden Bits den Schwellenwert, feuert das Bit für die nächste Schicht.
-* **Evaluierung und Evolution (Mutation):** Das Netzwerk bietet Methoden zur Bewertung der Gesamt-Fitness anhand eines Testdatensatzes. Da kein klassisches Backpropagation genutzt wird, simuliert eine Mutationsfunktion evolutionäre Anpassungen, indem sie Bytes und Schwellenwerte basierend auf einer definierten Rate gezielt per Zufall verändert. Ein Winner-Takes-All-Verfahren mit eingebauter Konfidenz-Klaue (Mindestvorsprung von 2 Punkten) sichert das finale Klassifikationsergebnis ab.
+* **Problem (XNOR-Vergleich):** Zu Beginn wurden die Eingänge im ersten Layer mittels *XNOR* verglichen. Das führte dazu, dass das Netz primär auf den leeren Hintergrund (Übereinstimmung von ungesetzten Bits) reagierte, anstatt das eigentliche Zeichen zu lernen.
+* **Lösung (AND-Vergleich):** Die Logik wurde auf eine strikte *AND*-Verknüpfung umgestellt. Ein Treffer wird jetzt nur gewertet, wenn das Netz dort anschlägt, wo auch im eigentlichen Zeichen aktive Bits gesetzt sind.
 
+---
+
+## 5. Aktueller Stand, Stagnation & KI-Review
+Das Netzwerk funktioniert grundsätzlich und lernt. Allerdings zeigt sich nach mittlerweile sehr vielen Trainingsdurchläufen (trotz Variationen bei Klonen, Stagnationsgrenzen und Mutationsraten) ein **Sättigungseffekt (Plateau-Bildung)**. Das Netz bleibt im Training an einem bestimmten Punkt hängen und stagniert dauerhaft.
+
+An diesem Punkt habe ich der KI erstmals die **gesamte Architektur** offengelegt, um Feedback einzuholen. 
+
+### Fazit der KI-Analyse:
+* Einige Vorschläge der KI waren für den aktuellen Aufbau unbrauchbar oder hätten das Netz komplett zerstört.
+* **Spannender Ansatz (Crossover):** Ein sehr interessanter Tipp ist das Prinzip der **Kreuzung (Crossover)**. Dabei nimmt man die zwei besten Netzwerke einer Generation als "Eltern" und kombiniert deren Gewichte/Bits, um genetische Blockaden zu lösen.
+* **Das mathematische Kernproblem (No-Backpropagation):** Die KI hat das mathematische Dilemma bestätigt: Wegen der rein binären Architektur ist **keine Backpropagation** (Fehlerrückführung) möglich. Es gibt keine stetigen Ableitungen (Gradienten), weshalb man Fehler nicht gezielt zurückrechnen kann, um die Stellschrauben exakt zu justieren. Man bleibt auf die evolutionäre Suche angewiesen.
