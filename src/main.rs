@@ -25,6 +25,7 @@ fn main() {
         maximale_generationen: 400, // Nach max. 400 Runden stoppt der Algorithmus
         basis_mutations_rate: 0.05, // 5% Chance, dass ein Gen (Bit) mutiert
         stagnations_grenze: 9,    // Wenn sich 9 Runden nix tut -> Mutationsrate erhöhen
+        initiale_klone: 1234,
     };
 
     // -------------------------------------------------------------------------

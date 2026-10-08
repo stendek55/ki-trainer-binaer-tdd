@@ -9,6 +9,7 @@ pub struct TrainingsKonfiguration {
     pub maximale_generationen: u32, // maximale anzahl an trainingsrunden
     pub basis_mutations_rate: f32,  // start-mutationsrate als fließkommazahl
     pub stagnations_grenze: u32,    // runden ohne verbesserung bis zur anpassung
+    pub initiale_klone: usize,      // Anzahl der Klone beim einmaligen Start-Massenklonen
 }
 
 /// Startet den genetischen Trainingsprozess
@@ -16,30 +17,55 @@ pub fn trainieren(
     datensatz: &[TrainingSample],
     konfig: TrainingsKonfiguration,
 ) -> BitNeuralNetwork {
-    //würfelt ein zufälliges Start-Netzwerk als ersten Champion
-    let mut champion = BitNeuralNetwork::new_random();
-    let mut champion_fitness = champion.evaluate_fitness(datensatz);
+    // 1. Ein allererstes, rein zufälliges Basis-Netzwerk als Ursprung erstellen
+    let basis_netz = BitNeuralNetwork::new_random();
     let max_possible_fitness = datensatz.len() as u32;
 
-    // Dynamische Anpassungsvariablen für die Mutationsrate bei Stagnation
+    // --- AB HIER IST ALLES NEU EINGEBAUT ---
+    println!("==================================================");
+    println!("STARTE BOOTSTRAPPING (EINMALIGE MASSENKLONUNG)");
+    println!(
+        "Erzeuge einmalig {} modifizierte Klone vom Startnetz...",
+        konfig.initiale_klone
+    );
+
+    // Nutzen des neuen Konfigurations-Parameters 'initiale_klone' statt einer festen Zahl
+    let initial_mutanten: Vec<BitNeuralNetwork> = (0..konfig.initiale_klone)
+        .map(|_| {
+            let mut kopie = basis_netz.clone();
+            kopie.mutate(konfig.basis_mutations_rate);
+            kopie
+        })
+        .collect();
+
+    // Alle Klone parallel bewerten lassen
+    let bewertete_initial_mutanten = bewerte_population(initial_mutanten, datensatz);
+
+    // Den absolut besten Klon aus der Masse extrahieren
+    let (mutanten_fitness, mutanten_netzwerk) = bewertete_initial_mutanten
+        .into_iter()
+        .max_by_key(|eintrag| eintrag.0)
+        .expect("Fehler: Bootstrapping-Population darf nicht leer sein.");
+
+    // Diesen Top-Klon ernennen wir nun zu unserem echten Start-Champion
+    let mut champion = mutanten_netzwerk;
+    let mut champion_fitness = mutanten_fitness;
+
+    println!("Top-Klon aus der Massenklonung gefunden!");
+    println!(
+        "Start-Fitness für das Haupttraining: {}/{} Punkte",
+        champion_fitness, max_possible_fitness
+    );
+    println!("==================================================");
+    // --- BISE HIERHER WAR ALLES NEU ---
+
+    // Dynamische Anpassungsvariablen für die Hauptschleife (Ab hier wie vorher)
     let mut aktuelle_mutation_rate = konfig.basis_mutations_rate;
     let mut generationen_ohne_verbesserung = 0;
 
-    println!("==================================================");
-    println!("STARTE TRAINING");
-    println!(
-        "Maximal erreichbare Fitness: {} Punkte",
-        max_possible_fitness
-    );
-    println!(
-        "Start-Fitness des Zufallsnetzes: {} Punkte",
-        champion_fitness
-    );
-    println!("==================================================");
-
-    // Frühzeitiger Abbruch, falls der Zufall uns bereits ein perfektes Netz geschenkt hat
+    // Frühzeitiger Abbruch, falls der Top-Klon bereits perfekt ist
     if champion_fitness == max_possible_fitness {
-        println!("JUHUUU--->Das Startnetz ist bereits perfekt;)");
+        println!("JUHUUU--->Ein Klon aus der Massenklonung ist bereits perfekt;)");
         return champion;
     }
 
@@ -261,6 +287,7 @@ mod tests {
             maximale_generationen: 1,
             basis_mutations_rate: 0.02,
             stagnations_grenze: 5,
+            initiale_klone: 5,
         };
 
         // ein testdatensatz mit einem beispiel erstellen
@@ -296,6 +323,7 @@ mod tests {
             maximale_generationen: 30,
             basis_mutations_rate: 0.1,
             stagnations_grenze: 5,
+            initiale_klone: 5,
         };
 
         // Wir messen die Fitness eines isolierten Zufallsnetzes als Referenz
