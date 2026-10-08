@@ -131,7 +131,7 @@ pub struct TrainingSample {
 
 pub fn lade_test_datensatz(index: usize) -> TrainingSample {
     //let inhalt = include_str!("../tests/fixtures/test_daten_01.csv");
-    let inhalt = include_str!("../datas/mehr_zahlen.csv");
+    let inhalt = include_str!("../datas/fertige_zahlen_hand.csv");
 
     // alle zeilen trennen und die zeile am gewünschten index herausholen
     let ds = inhalt.lines().nth(index).expect("index nicht gefunden");
@@ -184,17 +184,9 @@ pub fn lade_test_datensatz(index: usize) -> TrainingSample {
 
 /// Das vollständige neuronale Netzwerk mit deinen 3 Hidden Layers (64 -> 32 -> 16 -> 3).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/*
-pub struct BitNeuralNetwork {
-    pub hidden_1: Vec<BinaryNode<32>>,
-    pub hidden_2: Vec<BinaryNode<8>>,
-    pub hidden_3: Vec<BinaryNode<4>>,
-    pub output_nodes: Vec<BinaryNode<2>>,
-}
-*/
 pub struct BitNeuralNetwork {
     pub hidden_1: Vec<BinaryNode<32>>, // 128 Knoten (32 Bytes Schablone)
-    pub hidden_2: Vec<BinaryNode<16>>, // 64 Knoten (16 Bytes Schablone)
+    pub hidden_2: Vec<BinaryNode<128>>, // 64 Knoten (16 Bytes Schablone)
     pub output_nodes: Vec<BinaryNode<8>>, // 3 Ausgangsknoten (8 Bytes Schablone)
 }
 // =========================================================================
@@ -296,45 +288,16 @@ impl BitNeuralNetwork {
     /// Erstellt das gesamte Netzwerk durch das Aufrufen der ausgelagerten Knoten-Fabrik.
     pub fn new_random() -> Self {
         let mut rng = rand::rng();
-        /*
-            //schicht eins mit 64 knoten zu je 32 byte
-            let hidden_1: Vec<BinaryNode<32>> = (0..64)
-                .map(|_| BinaryNode::new_random(&mut rng, 10, 18))
-                .collect();
-
-            //schicht zwei mit 32 knoten zu je 8 byte
-            let hidden_2: Vec<BinaryNode<8>> = (0..32)
-                .map(|_| BinaryNode::new_random(&mut rng, 8, 14))
-                .collect();
-
-            //schicht drei mit 16 knoten zu je 4 byte
-            let hidden_3: Vec<BinaryNode<4>> = (0..16)
-                .map(|_| BinaryNode::new_random(&mut rng, 4, 8))
-                .collect();
-
-            //ausgabeschicht mit 3 knoten zu je 2 byte
-            let output_nodes: Vec<BinaryNode<2>> = (0..3)
-                .map(|_| BinaryNode::new_random(&mut rng, 1, 4))
-                .collect();
-            // Alle sauber erzeugten Schichten zusammenfügen
-            BitNeuralNetwork {
-                hidden_1,
-                hidden_2,
-                hidden_3,
-                output_nodes,
-            }
-        */
         // Schicht 1: 128 Knoten. Eingang: 256 Bits vom Bild.
         // Threshold 10 bis 18 filtert echte Bildpunkte der Zahl heraus.
         let hidden_1: Vec<BinaryNode<32>> = (0..128)
             .map(|_| BinaryNode::new_random(&mut rng, 10, 18))
             .collect();
 
-        // Schicht 2: 64 Knoten. Eingang: 128 Bits aus Schicht 1.
-        // Da Schicht 1 breit ist, werden ca. 30-50 Bits feuern.
-        // Ein Schwellenwert von 14 bis 26 ist hier der mathematische "Süßpunkt".
-        let hidden_2: Vec<BinaryNode<16>> = (0..64)
-            .map(|_| BinaryNode::new_random(&mut rng, 14, 26))
+        // Schicht 2: 64 Knoten. Eingang: 128 Bytes (1024 Bits) aus Schicht 1.
+        // Da die Datenmenge größer ist, passen wir den "Süßpunkt" des Thresholds leicht an.
+        let hidden_2: Vec<BinaryNode<128>> = (0..64)
+            .map(|_| BinaryNode::new_random(&mut rng, 32, 96)) // Angepasster Threshold-Bereich für 128 Bytes
             .collect();
 
         // Ausgabeschicht: 3 Knoten. Eingang: 64 Bits aus Schicht 2.
@@ -349,6 +312,26 @@ impl BitNeuralNetwork {
             hidden_2,
             output_nodes,
         }
+    }
+    /// Hilfsfunktion für Ansatz 3: Wandelt die Trefferanzahl eines Schicht-1-Knotens
+    /// basierend auf seinem Basis-Threshold in ein gestuftes 8-Bit-Signal um.
+    fn quantisiere_treffer_zu_byte(matches: u32, basis_threshold: u16) -> u8 {
+        let mut bb = BitByte::new(0u8);
+
+        // Wir definieren 8 aufsteigende Stufen.
+        // Beispiel: Wenn Basis-Threshold = 12 ist, erhöht sich die Hürde pro Bit um 3 Punkte.
+        let schrittweite = 3;
+
+        for bit_index in 0..8 {
+            let benötigte_treffer = basis_threshold as u32 + (bit_index as u32 * schrittweite);
+            if matches >= benötigte_treffer {
+                bb = bb.set_bit(bit_index as u8);
+            } else {
+                break; // Wenn eine Stufe nicht geschafft wird, brechen die höheren auch ab (Thermometer)
+            }
+        }
+
+        bb.value()
     }
 
     /// Hilfsfunktion, die die Übereinstimmungen zwischen einem Eingabe-Slice
@@ -410,130 +393,37 @@ impl BitNeuralNetwork {
         }
     }
 
-    /// Schleust eine 16x16 Matrix (gespeichert als 32 Bytes = 256 Bits) durch alle
-    /// drei Schichten des Netzwerks und gibt das Ergebnis der Erkennung zurück.
-    /*
-        pub fn forward_pass(&self, input: &[BitByte; 32]) -> Classification {
-            // =========================================================================
-            // SCHICHT 1: 256 Eingangs-Bits -> 64 Ausgangs-Bits (8 Bytes)
-            // =========================================================================
-            let mut layer_1_output = [0u8; 8];
-
-            for node_idx in 0..64 {
-                let knoten = &self.hidden_1[node_idx];
-
-                // anpassung hier: wir berechnen die matches direkt, indem wir die inneren u8-werte übergeben
-                let mut gesamt_matches = 0u32;
-                for (bb_layer, weight_byte) in input.iter().zip(knoten.weights.iter()) {
-                    let bb_weight = BitByte::new(*weight_byte);
-                    // bb_layer ist bereits ein BitByte, wir rufen direkt deine operationen auf
-                    let xnor_byte = bb_layer.bitwise_xor(bb_weight).bitwise_not();
-                    gesamt_matches += xnor_byte.value().count_ones();
-                }
-                Self::aktiviere_ausgangs_bit(
-                    &mut layer_1_output,
-                    node_idx,
-                    gesamt_matches,
-                    knoten.threshold,
-                );
-            }
-
-            // =========================================================================
-            // SCHICHT 2: 64 Bits (8 Bytes) -> 32 Ausgangs-Bits (4 Bytes)
-            // =========================================================================
-            let mut layer_2_output = [0u8; 4];
-
-            for node_idx in 0..32 {
-                let knoten = &self.hidden_2[node_idx];
-                let gesamt_matches = Self::berechne_knoten_matches(&layer_1_output, &knoten.weights);
-
-                Self::aktiviere_ausgangs_bit(
-                    &mut layer_2_output,
-                    node_idx,
-                    gesamt_matches,
-                    knoten.threshold,
-                );
-            }
-
-            // =========================================================================
-            // SCHICHT 3: 32 Bits (4 Bytes) -> 16 Ausgangs-Bits (2 Bytes)
-            // =========================================================================
-            let mut layer_3_output = [0u8; 2];
-
-            for node_idx in 0..16 {
-                let knoten = &self.hidden_3[node_idx];
-                let gesamt_matches = Self::berechne_knoten_matches(&layer_2_output, &knoten.weights);
-
-                Self::aktiviere_ausgangs_bit(
-                    &mut layer_3_output,
-                    node_idx,
-                    gesamt_matches,
-                    knoten.threshold,
-                );
-            }
-
-            // =========================================================================
-            // AUSGABESCHICHT: Evaluierung der 3 Zustandsknoten (NULL, EINS, ANDERE)
-            // =========================================================================
-            // Wir sammeln die Trefferpunkte für jeden der 3 Ausgangsknoten
-            let mut scores = [0u32; 3];
-
-            for (score, knoten) in scores.iter_mut().zip(self.output_nodes.iter()) {
-                for (l3_byte, weight_byte) in layer_3_output.iter().zip(knoten.weights.iter()) {
-                    let bb_l3 = BitByte::new(*l3_byte);
-                    let bb_weight = BitByte::new(*weight_byte);
-
-                    let xnor_byte = bb_l3.bitwise_xor(bb_weight).bitwise_not();
-                    // Wir addieren die Hardware-Popcounts direkt auf die veränderbare Referenz (*score)
-                    *score += xnor_byte.value().count_ones();
-                }
-            }
-
-            // Winner-Takes-All Auswertung (Wer hat die meisten Bit-Übereinstimmungen?)
-            let punkte_null = scores[0];
-            let punkte_eins = scores[1];
-            let punkte_andere = scores[2];
-
-            // Wenn der "ANDERE"-Knoten gewinnt oder Gleichstand herrscht, brechen wir ab
-            if punkte_andere >= punkte_null && punkte_andere >= punkte_eins {
-                return Classification::ANDERE;
-            }
-
-            // Wir fordern eine klare Konfidenz (Vorsprung von mindestens 2 Punkten),
-            // um Rauschen oder uneindeutige Zeichnungen als ANDERE abzufangen.
-            if punkte_eins > punkte_null && (punkte_eins - punkte_null) >= 2 {
-                Classification::EINS
-            } else if punkte_null > punkte_eins && (punkte_null - punkte_eins) >= 2 {
-                Classification::NULL
-            } else {
-                Classification::ANDERE // Bei zu knappen Unterschieden
-            }
-        }
-    */
     pub fn forward_pass(&self, input: &[BitByte; 32]) -> Classification {
-        // --- SCHICHT 1: 256 Bits -> 128 Bits (16 Bytes) ---
-        let mut layer_1_output = [0u8; 16];
+        // --- SCHICHT 1: 256 Bits -> 128 Bytes (NEU: Jeder Knoten liefert 8 Bits!) ---
+        let mut layer_1_output = [0u8; 128]; // Platz für 128 vollwertige Bytes
+
         for node_idx in 0..128 {
             let knoten = &self.hidden_1[node_idx];
             let mut gesamt_matches = 0u32;
+
+            // 1. Bitweises AND mit dem Bild
             for (bb_layer, weight_byte) in input.iter().zip(knoten.weights.iter()) {
                 let bb_weight = BitByte::new(*weight_byte);
                 let and_byte = bb_layer.bitwise_and(bb_weight);
                 gesamt_matches += and_byte.value().count_ones();
             }
-            Self::aktiviere_ausgangs_bit(
-                &mut layer_1_output,
-                node_idx,
-                gesamt_matches,
-                knoten.threshold,
-            );
+
+            // 2. NEU: Wir jagen die Matches durch Ansatz 3 und speichern das ganze Byte ab
+            layer_1_output[node_idx] =
+                Self::quantisiere_treffer_zu_byte(gesamt_matches, knoten.threshold);
         }
 
-        // --- SCHICHT 2: 128 Bits (16 Bytes) -> 64 Bits (8 Bytes) ---
-        let mut layer_2_output = [0u8; 8]; // Erweitert auf 8 Bytes für die 64 Knoten
+        // --- SCHICHT 2: 128 Bytes (1024 Bits!) -> 64 Bits (8 Bytes) ---
+        let mut layer_2_output = [0u8; 8];
+
         for node_idx in 0..64 {
             let knoten = &self.hidden_2[node_idx];
+
+            // NEU: Da layer_1_output jetzt 128 Bytes lang ist, matched 'berechne_knoten_matches'
+            // automatisch die vollen 128 Bytes der Schablone des Schicht-2-Knotens!
             let gesamt_matches = Self::berechne_knoten_matches(&layer_1_output, &knoten.weights);
+
+            // Ab hier bleibt es binär: Schicht 2 entscheidet per Threshold, ob ihr Ausgangs-Bit zündet
             Self::aktiviere_ausgangs_bit(
                 &mut layer_2_output,
                 node_idx,
@@ -553,6 +443,7 @@ impl BitNeuralNetwork {
             }
         }
 
+        // Winner-Takes-All Auswertung
         let punkte_null = scores[0];
         let punkte_eins = scores[1];
         let punkte_andere = scores[2];
@@ -586,13 +477,6 @@ impl BitNeuralNetwork {
         for knoten in self.hidden_2.iter_mut() {
             knoten.mutate(&mut rng, mutations_rate);
         }
-
-        /*
-        // 3. Mutiere Schicht 3 (Alle 16 Knoten)
-        for knoten in self.hidden_3.iter_mut() {
-            knoten.mutate(&mut rng, mutations_rate);
-        }
-        */
 
         // 4. Mutiere die Ausgabeschicht (Alle 3 Ausgangsknoten)
         for knoten in self.output_nodes.iter_mut() {
@@ -771,45 +655,36 @@ mod tests {
     /// lässt es sich nicht zuverlässig auf mathematische Logik prüfen.
     /// Hier erzwingen wir kontrollierte Zustände, um den `forward_pass` exakt zu testen.
     fn erstelle_vorhersagbares_netzwerk() -> BitNeuralNetwork {
-        // Schicht 1, 2 und 3 bekommen Schablonen aus puren Nullen und Threshold 0.
-        // Das bedeutet: Jedes Bit passt im XNOR (0^0=!1) perfekt. Die Knoten feuern IMMER.
+        // Für das AND-Verhalten setzen wir alle Gewichte auf 0xFF (Überall Einsen),
+        // damit alle Eingangs-Bits durchgelassen werden.
         let knoten_l1 = BinaryNode {
-            weights: [0x00; 32],
+            weights: [0xFF; 32],
             threshold: 0,
         };
         let knoten_l2 = BinaryNode {
+            weights: [0xFF; 128],
+            threshold: 0,
+        };
+
+        // Knoten NULL (Index 0): Maske blockiert alles (0x00) -> 0 Treffer im AND.
+        let knoten_null = BinaryNode {
             weights: [0x00; 8],
             threshold: 0,
         };
-        let knoten_l3 = BinaryNode {
-            weights: [0x00; 4],
-            threshold: 0,
-        };
-
-        // Die Ausgabeschicht steuern wir jetzt präzise über die Gewichts-Masken:
-        // Da die Schicht 3 davor immer nur Einsen feuert, erzeugt das Zwischenergebnis
-        // in der Ausgabeschicht den Byte-Zustand [0xFF, 0xFF] (pures High-Signal).
-
-        // Knoten NULL (Index 0): Maske verlangt Nullen -> XNOR mit 0xFF liefert 0 Treffer.
-        let knoten_null = BinaryNode {
-            weights: [0x00, 0x00],
-            threshold: 0,
-        };
-        // Knoten EINS (Index 1): Maske verlangt Einsen -> XNOR mit 0xFF liefert 16 Treffer (Maximum).
+        // Knoten EINS (Index 1): Maske öffnet alles (0xFF) -> Maximale Treffer.
         let knoten_eins = BinaryNode {
-            weights: [0xFF, 0xFF],
+            weights: [0xFF; 8],
             threshold: 0,
         };
-        // Knoten ANDERE (Index 2): Maske verlangt ein mittleres Rauschen.
+        // Knoten ANDERE (Index 2): Mittleres Signal.
         let knoten_andere = BinaryNode {
-            weights: [0x55, 0xAA],
+            weights: [0x55; 8],
             threshold: 0,
         };
 
         BitNeuralNetwork {
-            hidden_1: vec![knoten_l1; 64],
-            hidden_2: vec![knoten_l2; 32],
-            hidden_3: vec![knoten_l3; 16],
+            hidden_1: vec![knoten_l1; 128],
+            hidden_2: vec![knoten_l2; 64],
             output_nodes: vec![knoten_null, knoten_eins, knoten_andere],
         }
     }
@@ -819,29 +694,24 @@ mod tests {
         // Testet, ob die Fabrik-Funktion 'new_random' fehlerfrei durchläuft
         let netzwerk = BitNeuralNetwork::new_random();
 
-        // Überprüfung der strukturellen Integrität (Array-Längen der Schichten)
-        assert_eq!(netzwerk.hidden_1.len(), 64);
-        assert_eq!(netzwerk.hidden_2.len(), 32);
-        assert_eq!(netzwerk.hidden_3.len(), 16);
+        // Überprüfung der neuen strukturellen Integrität
+        assert_eq!(netzwerk.hidden_1.len(), 128);
+        assert_eq!(netzwerk.hidden_2.len(), 64);
         assert_eq!(netzwerk.output_nodes.len(), 3);
 
-        // Validierung, dass die erwürfelten Thresholds innerhalb der definierten Schranken liegen
-        assert!(netzwerk.hidden_1[0].threshold >= 100 && netzwerk.hidden_1[0].threshold <= 180);
-        assert!(netzwerk.hidden_2[0].threshold >= 25 && netzwerk.hidden_2[0].threshold <= 45);
-        assert!(netzwerk.hidden_3[0].threshold >= 12 && netzwerk.hidden_3[0].threshold <= 24);
-        assert!(
-            netzwerk.output_nodes[0].threshold >= 6 && netzwerk.output_nodes[0].threshold <= 12
-        );
+        // Validierung der neuen gewürfelten Schwellenwert-Schranken
+        assert!(netzwerk.hidden_1[0].threshold >= 10 && netzwerk.hidden_1[0].threshold <= 18);
+        assert!(netzwerk.hidden_2[0].threshold >= 32 && netzwerk.hidden_2[0].threshold <= 96);
+        assert!(netzwerk.output_nodes[0].threshold >= 2 && netzwerk.output_nodes[0].threshold <= 8);
     }
 
     #[test]
     fn test_forward_pass_klassifizierung_eins() {
         let netzwerk = erstelle_vorhersagbares_netzwerk();
-        let leerer_input = [BitByte::new(0x00); 32]; // Löst die maximale Übereinstimmungskette aus
+        // Ein vollflächiges Eingangssignal triggert das simulierte Netzwerk
+        let voller_input = [BitByte::new(0xFF); 32];
 
-        // Der Forward-Pass muss unter diesen kontrollierten Bedingungen zwingend EINS ausgeben,
-        // da der Knoten EINS 16 Treffer erzielt und die geforderte Konfidenz von >= 2 Punkten erfüllt.
-        let ergebnis = netzwerk.forward_pass(&leerer_input);
+        let ergebnis = netzwerk.forward_pass(&voller_input);
         assert_eq!(ergebnis, Classification::EINS);
     }
 
@@ -849,15 +719,12 @@ mod tests {
     fn test_forward_pass_klassifizierung_andere_bei_gleichstand() {
         let mut netzwerk = erstelle_vorhersagbares_netzwerk();
 
-        // Wir manipulieren das Netz künstlich zu einem absoluten Gleichstand (Patt):
-        // Knoten NULL und Knoten EINS bekommen exakt dieselbe Gewichtsmaske.
-        netzwerk.output_nodes[0].weights = [0xFF, 0xFF]; // Knoten NULL fordert nun auch Max-Treffer
+        // Manipuliere Knoten NULL auf die gleiche Schablone wie Knoten EINS (8 Bytes breit)
+        netzwerk.output_nodes[0].weights = [0xFF; 8];
 
-        let leerer_input = [BitByte::new(0x00); 32];
-        let ergebnis = netzwerk.forward_pass(&leerer_input);
+        let voller_input = [BitByte::new(0xFF); 32];
+        let ergebnis = netzwerk.forward_pass(&voller_input);
 
-        // Bei einem Patt oder zu geringem Vorsprung (< 2 Punkte) greift die Konfidenz-Klaue
-        // und das System muss "ANDERE" (Unbekannt) zurückgeben.
         assert_eq!(ergebnis, Classification::ANDERE);
     }
 
@@ -888,11 +755,11 @@ mod tests {
         // Wir bauen einen künstlichen Mini-Datensatz aus zwei Bildern
         let datensatz = vec![
             TrainingSample {
-                input: [BitByte::new(0x00); 32], // Dieses Bild wird vom Testnetz als EINS erkannt
+                input: [BitByte::new(0xFF); 32], // Dieses Bild wird vom Testnetz als EINS erkannt
                 target: Classification::EINS,    // Korrektes Label -> Gibt 1 Punkt
             },
             TrainingSample {
-                input: [BitByte::new(0x00); 32], // Wird ebenfalls als EINS erkannt
+                input: [BitByte::new(0xFF); 32], // Wird ebenfalls als EINS erkannt
                 target: Classification::NULL,    // Falsches Label -> Gibt 0 Punkte
             },
         ];
